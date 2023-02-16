@@ -1,5 +1,5 @@
 [package]
-name = "ai-snake"
+name = "snake"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 crossterm = "0.26.0"
+pathfinding = "4.2.1"
 rand = "0.8.5"
