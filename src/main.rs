@@ -26,7 +26,7 @@ impl Point {
         (self.x.abs_diff(other.x) + self.y.abs_diff(other.y)) as u32
     }
 
-    fn successors(&self) -> Vec<(Point, u32)> {
+    fn successors(&self, body: &Vec<Point>) -> Vec<(Point, u32)> {
         let &Point { x, y } = self;
         vec![
             Point {
@@ -55,6 +55,7 @@ impl Point {
             },
         ]
         .into_iter()
+        .filter(|p| !body.contains(p))
         .map(|p| (p, 1))
         .collect()
     }
@@ -149,98 +150,104 @@ fn main() -> Result<()> {
     draw_snake(&mut stdout, &snake.body, &snake.body)?;
     queue!(stdout, cursor::MoveTo(0, HEIGHT + 2))?;
     // writeln!(stdout, "Score: {}", score)?;
+    let mut auto = false;
+    let mut event = None;
     loop {
-        let goal = food.position;
-        let result = astar(
-            &snake.body[0],
-            |p| p.successors(),
-            |p| p.distance(&goal),
-            |p| *p == goal,
-        );
-        match result {
-            Some(steps) => {
-                for (i, step) in steps.0.iter().enumerate() {
-                    sleep(Duration::from_millis(5));
-                    // let head = snake.body[0];
-                    // if step.x > head.x {
-                    //     direction = Direction::Right;
-                    // } else if step.x < head.x {
-                    //     direction = Direction::Left;
-                    // } else if step.y > head.y {
-                    //     direction = Direction::Down;
-                    // } else if step.x < head.x {
-                    //     direction = Direction::Up;
-                    // }
-                    // queue!(
-                    //     stdout,
-                    //     cursor::MoveTo(WIDTH + 3, i as u16),
-                    //     Print(format!("{:?}, {:?}", step, direction))
-                    // )?;
-                    // let new_head = match direction {
-                    //     Direction::Up => Point {
-                    //         x: head.x,
-                    //         y: if head.y > 1 { head.y - 1 } else { HEIGHT },
-                    //     },
-                    //     Direction::Down => Point {
-                    //         x: head.x,
-                    //         y: if head.y < HEIGHT { head.y + 1 } else { 1 },
-                    //     },
-                    //     Direction::Left => Point {
-                    //         x: if head.x > 1 { head.x - 1 } else { WIDTH },
-                    //         y: head.y,
-                    //     },
-                    //     Direction::Right => Point {
-                    //         x: if head.x < WIDTH { head.x + 1 } else { 1 },
-                    //         y: head.y,
-                    //     },
-                    // };
-                    let new_head = *step;
-                    // if snake.body.contains(&new_head) {
-                    //     break;
-                    // }
-                    let old_body = snake.clone();
-                    snake.body.insert(0, new_head);
-                    if snake.body[0] == food.position {
-                        score += 1;
-                        food = generate_food(&snake.body);
-                    } else {
-                        snake.body.pop();
+        if poll(Duration::from_millis(10))? {
+            event = Some(read()?);
+            match event.clone().unwrap() {
+                Event::Key(event) => match event.code {
+                    KeyCode::Esc => {
+                        break;
                     }
-                    // queue!(stdout, Clear(ClearType::All))?;
-                    draw_border(&mut stdout, WIDTH, HEIGHT)?;
-                    draw_food(&mut stdout, food.position.x, food.position.y)?;
-                    draw_snake(&mut stdout, &snake.body, &old_body.body)?;
-                    queue!(stdout, cursor::MoveTo(0, HEIGHT + 2))?;
-                    println!("Score: {}", score);
-                    stdout.flush().unwrap();
+                    KeyCode::Char('a') => {
+                        auto = !auto;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        let new_head = if auto && event.is_some() {
+            match event.clone().unwrap() {
+                Event::Key(event) => match event.code {
+                    KeyCode::Up if direction != Direction::Down && !auto => {
+                        direction = Direction::Up;
+                    }
+                    KeyCode::Down if direction != Direction::Up && !auto => {
+                        direction = Direction::Down;
+                    }
+                    KeyCode::Left if direction != Direction::Right && !auto => {
+                        direction = Direction::Left;
+                    }
+                    KeyCode::Right if direction != Direction::Left && !auto => {
+                        direction = Direction::Right;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            };
+            let head = snake.body[0];
+            match direction {
+                Direction::Up => Point {
+                    x: head.x,
+                    y: if head.y > 1 { head.y - 1 } else { HEIGHT },
+                },
+                Direction::Down => Point {
+                    x: head.x,
+                    y: if head.y < HEIGHT { head.y + 1 } else { 1 },
+                },
+                Direction::Left => Point {
+                    x: if head.x > 1 { head.x - 1 } else { WIDTH },
+                    y: head.y,
+                },
+                Direction::Right => Point {
+                    x: if head.x < WIDTH { head.x + 1 } else { 1 },
+                    y: head.y,
+                },
+            }
+        } else {
+            let goal = food.position;
+            let result = astar(
+                &snake.body[0],
+                |p| p.successors(&snake.body),
+                |p| p.distance(&goal),
+                |p| *p == goal,
+            );
+            match result {
+                Some(steps) => {
+                    let mut steps = steps.0.iter();
+                    let _ = steps.next().unwrap();
+                    let step = steps.next().unwrap();
+                    {
+                        // sleep(Duration::from_millis(1));
+                        *step
+                        // if snake.body.contains(&new_head) {
+                        //     break;
+                        // }
+                    }
+                }
+                None => {
+                    auto = false;
+                    snake.body[0]
                 }
             }
-            None => break,
         };
-        // if poll(Duration::from_millis(100))? {
-        //     let event = read()?;
-        //     match event {
-        //         Event::Key(event) => match event.code {
-        //             KeyCode::Esc => {
-        //                 break;
-        //             }
-        //             KeyCode::Up if direction != Direction::Down => {
-        //                 direction = Direction::Up;
-        //             }
-        //             KeyCode::Down if direction != Direction::Up => {
-        //                 direction = Direction::Down;
-        //             }
-        //             KeyCode::Left if direction != Direction::Right => {
-        //                 direction = Direction::Left;
-        //             }
-        //             KeyCode::Right if direction != Direction::Left => {
-        //                 direction = Direction::Right;
-        //             }
-        //             _ => {}
-        //         },
-        //         _ => {}
-        //     }
-        // }
+        let old_body = snake.clone();
+        snake.body.insert(0, new_head);
+        if snake.body[0] == food.position {
+            score += 1;
+            food = generate_food(&snake.body);
+        } else {
+            snake.body.pop();
+        }
+        // queue!(stdout, Clear(ClearType::All))?;
+        draw_border(&mut stdout, WIDTH, HEIGHT)?;
+        draw_food(&mut stdout, food.position.x, food.position.y)?;
+        draw_snake(&mut stdout, &snake.body, &old_body.body)?;
+        queue!(stdout, cursor::MoveTo(0, HEIGHT + 2))?;
+        println!("Score: {}", score);
+        stdout.flush().unwrap();
     }
     draw_border(&mut stdout, WIDTH, HEIGHT)?;
     draw_food(&mut stdout, food.position.x, food.position.y)?;
